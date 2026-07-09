@@ -23,6 +23,8 @@ interface StoreState {
   startAttackProcess: (monsterId: MonsterIds, speed: number) => void;
   updateAttackTimestamp: (time: number, speed: number) => void;
   changeSlayerTask: (monsterId: SlayerCategoriesIds, masterId: SlayerMasterIds, minAmount: number, maxAmount: number) => void;
+  depositItemsToBank: (items: any[]) => void;
+  useItemsOnGround: (items: any[]) => void;
 }
 
 interface PlayerStore {
@@ -38,6 +40,7 @@ declare global {
     autoSlayerManualSelection: Record<number, Record<number, number>>;
     autoSlayerIgnoreCost: boolean;
     autoSlayerWeakness: boolean;
+    autoSlayerAutoBank: boolean;
     getWeakestAttackStyleSkillId?: (stats: any) => number | null;
     getFiber: (el: Element | null) => any;
     AllMonsters?: Record<number, GameMonster>;
@@ -85,6 +88,7 @@ declare global {
   var autoSlayerManualSelection: Record<number, Record<number, number>>;
   var autoSlayerIgnoreCost: boolean;
   var autoSlayerWeakness: boolean;
+  var autoSlayerAutoBank: boolean;
   var getWeakestAttackStyleSkillId: ((stats: any) => number | null) | undefined;
   var getFiber: (el: Element | null) => any;
   var createMod: (cb: (stores: { playerStore: PlayerStore; persistentStore: any }) => void) => void;

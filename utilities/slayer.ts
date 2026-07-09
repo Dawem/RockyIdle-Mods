@@ -65,25 +65,64 @@ export const getCategoryName = (categoryId: SlayerCategoriesIds): string => {
   return defaultNames[categoryId] || `Category ${categoryId}`;
 };
 
+// Helper to check if player has enough tokens/items for a costly monster
+const hasTokensForMonster = (monster: any): boolean => {
+  if (!monster.itemCost || monster.itemCost.length === 0) return true;
+  const playerStore = window.playerStore;
+  if (!playerStore) return false;
+  const items = playerStore.getState().state.items;
+  if (!items) return false;
+
+  const ownedQuantities: Record<number, number> = {};
+  for (const cost of monster.itemCost) {
+    ownedQuantities[cost.id] = 0;
+  }
+
+  for (const container of Object.values(items)) {
+    if (Array.isArray(container)) {
+      for (const slot of container) {
+        if (slot && typeof slot.id === "number" && typeof slot.amount === "number") {
+          if (slot.id in ownedQuantities) {
+            ownedQuantities[slot.id] += slot.amount;
+          }
+        }
+      }
+    }
+  }
+
+  for (const cost of monster.itemCost) {
+    if (ownedQuantities[cost.id] < cost.amount) {
+      return false;
+    }
+  }
+  return true;
+};
+
 // Helper to find monsters belonging to a slayer category and select based on strategy
 export const getMonsterForCategory = (categoryId: SlayerCategoriesIds, slayerMasterId: SlayerMasterIds) => {
   if (!window.AllMonsters) return null;
   const monsters = Object.values(window.AllMonsters);
+
+  const strategy = window.autoSlayerStrategy;
 
   const matchingMonsters = monsters.filter((monster) => {
     const isCategoryMatch =
       monster.slayer && Array.isArray(monster.slayer.category) && monster.slayer.category.includes(Number(categoryId));
     if (!isCategoryMatch) return false;
 
-    if (window.autoSlayerIgnoreCost && monster.itemCost && monster.itemCost.length > 0) {
-      return false;
+    // Check if costly and if we have the tokens
+    if (monster.itemCost && monster.itemCost.length > 0) {
+      if (!hasTokensForMonster(monster)) {
+        return false;
+      }
+      if (strategy !== "manual" && window.autoSlayerIgnoreCost) {
+        return false;
+      }
     }
     return true;
   });
 
   if (matchingMonsters.length === 0) return null;
-
-  const strategy = window.autoSlayerStrategy;
 
   if (strategy === "manual") {
     const savedMonsterId = window.autoSlayerManualSelection[slayerMasterId]?.[categoryId];
@@ -93,6 +132,16 @@ export const getMonsterForCategory = (categoryId: SlayerCategoriesIds, slayerMas
       console.warn(
         `[Mod] Manually selected monster ID ${savedMonsterId} is costly or unavailable. Falling back to Lowest Health.`,
       );
+    }
+    // Fallback: exclude any costly monsters to ensure a non-costly replacement is chosen
+    const nonCostlyMonsters = matchingMonsters.filter((m) => !m.itemCost || m.itemCost.length === 0);
+    if (nonCostlyMonsters.length > 0) {
+      nonCostlyMonsters.sort((a, b) => {
+        const hpA = a.stats && a.stats.hitpoints !== undefined ? a.stats.hitpoints : 999999;
+        const hpB = b.stats && b.stats.hitpoints !== undefined ? b.stats.hitpoints : 999999;
+        return hpA - hpB;
+      });
+      return nonCostlyMonsters[0];
     }
   }
 

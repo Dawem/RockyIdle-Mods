@@ -10,6 +10,7 @@ window.autoSlayerDifficulty = Number(localStorage.getItem("autoSlayerDifficulty"
 window.autoSlayerStrategy = localStorage.getItem("autoSlayerStrategy") || "lowest";
 window.autoSlayerIgnoreCost = localStorage.getItem("autoSlayerIgnoreCost") === "true";
 window.autoSlayerWeakness = localStorage.getItem("autoSlayerWeakness") === "true";
+window.autoSlayerAutoBank = localStorage.getItem("autoSlayerAutoBank") === "true";
 
 const manualSelectionRaw = localStorage.getItem("autoSlayerManualSelection");
 window.autoSlayerManualSelection = manualSelectionRaw ? JSON.parse(manualSelectionRaw) : {};
@@ -297,11 +298,11 @@ function openMonsterSelectorModal() {
 function createSlayerBotUI() {
   if (document.getElementById("slayer-bot-panel")) return;
 
+  let updateIgnoreCostDisableState: (() => void) | undefined;
+
   const panel = document.createElement("div");
   panel.id = "slayer-bot-panel";
   panel.style.position = "fixed";
-  panel.style.bottom = "20px";
-  panel.style.left = "20px";
   panel.style.zIndex = "9999";
   panel.style.background = "rgba(30, 42, 42, 0.9)";
   panel.style.backdropFilter = "blur(10px)";
@@ -317,17 +318,48 @@ function createSlayerBotUI() {
   panel.style.userSelect = "none";
   panel.style.minWidth = "220px";
 
-  // Title
-  const title = document.createElement("div");
-  title.innerText = "SLAYER BOT";
-  title.style.fontWeight = "bold";
-  title.style.fontSize = "13px";
-  title.style.letterSpacing = "1.5px";
-  title.style.borderBottom = "1px solid #3d4f4f";
-  title.style.paddingBottom = "4px";
-  title.style.textAlign = "center";
-  title.style.cursor = "grab";
-  panel.appendChild(title);
+  // Title bar container
+  const titleBar = document.createElement("div");
+  titleBar.style.display = "flex";
+  titleBar.style.justifyContent = "space-between";
+  titleBar.style.alignItems = "center";
+  titleBar.style.borderBottom = "1px solid #3d4f4f";
+  titleBar.style.paddingBottom = "4px";
+  titleBar.style.cursor = "grab";
+
+  // Drag handle/title text
+  const titleText = document.createElement("span");
+  titleText.innerText = "SLAYER BOT";
+  titleText.style.fontWeight = "bold";
+  titleText.style.fontSize = "13px";
+  titleText.style.letterSpacing = "1.5px";
+  titleText.style.flex = "1";
+  titleText.style.textAlign = "left";
+  titleText.style.paddingLeft = "4px";
+  titleBar.appendChild(titleText);
+
+  // Minimize button
+  const minBtn = document.createElement("button");
+  minBtn.style.background = "none";
+  minBtn.style.border = "none";
+  minBtn.style.color = "#ff9800";
+  minBtn.style.fontSize = "14px";
+  minBtn.style.cursor = "pointer";
+  minBtn.style.outline = "none";
+  minBtn.style.padding = "0 4px";
+  minBtn.style.fontWeight = "bold";
+  minBtn.style.lineHeight = "1";
+  minBtn.innerText = "−"; // minus symbol
+  titleBar.appendChild(minBtn);
+
+  panel.appendChild(titleBar);
+
+  // Content container for minimize/restore collapse
+  const contentContainer = document.createElement("div");
+  contentContainer.style.display = "flex";
+  contentContainer.style.flexDirection = "column";
+  contentContainer.style.gap = "8px";
+  contentContainer.style.marginTop = "4px";
 
   // Dragging logic
   let isDragging = false;
@@ -338,9 +370,10 @@ function createSlayerBotUI() {
   let panelWidth = 0;
   let panelHeight = 0;
 
-  title.addEventListener("mousedown", (e) => {
+  titleBar.addEventListener("mousedown", (e) => {
+    if (e.target === minBtn) return;
     isDragging = true;
-    title.style.cursor = "grabbing";
+    titleBar.style.cursor = "grabbing";
 
     const rect = panel.getBoundingClientRect();
     panelWidth = rect.width;
@@ -381,7 +414,12 @@ function createSlayerBotUI() {
   document.addEventListener("mouseup", () => {
     if (isDragging) {
       isDragging = false;
-      title.style.cursor = "grab";
+      titleBar.style.cursor = "grab";
+      // Save position to localStorage
+      localStorage.setItem("slayerBotPosition", JSON.stringify({
+        left: parseFloat(panel.style.left),
+        top: parseFloat(panel.style.top)
+      }));
     }
   });
 
@@ -418,7 +456,7 @@ function createSlayerBotUI() {
     console.log(`[Mod] Auto Slayer set to: ${window.autoSlayerEnabled}`);
   };
 
-  panel.appendChild(toggleBtn);
+  contentContainer.appendChild(toggleBtn);
 
   // Difficulty row
   const diffRow = document.createElement("div");
@@ -465,7 +503,7 @@ function createSlayerBotUI() {
     console.log(`[Mod] Auto Slayer Difficulty set to: ${window.autoSlayerDifficulty}`);
   };
   diffRow.appendChild(diffSelect);
-  panel.appendChild(diffRow);
+  contentContainer.appendChild(diffRow);
 
   // Strategy row
   const stratRow = document.createElement("div");
@@ -507,7 +545,7 @@ function createSlayerBotUI() {
   stratSelect.value = window.autoSlayerStrategy;
 
   stratRow.appendChild(stratSelect);
-  panel.appendChild(stratRow);
+  contentContainer.appendChild(stratRow);
 
   // Monster Selector button
   const selectorBtn = document.createElement("button");
@@ -547,13 +585,16 @@ function createSlayerBotUI() {
     localStorage.setItem("autoSlayerStrategy", stratSelect.value);
     console.log(`[Mod] Auto Slayer Strategy set to: ${window.autoSlayerStrategy}`);
     updateSelectorBtnStyle();
+    if (updateIgnoreCostDisableState) {
+      updateIgnoreCostDisableState();
+    }
   };
 
   selectorBtn.onclick = () => {
     openMonsterSelectorModal();
   };
 
-  panel.appendChild(selectorBtn);
+  contentContainer.appendChild(selectorBtn);
   updateSelectorBtnStyle();
 
   // Ignore Cost Toggle Container
@@ -625,6 +666,7 @@ function createSlayerBotUI() {
   }
 
   ignoreCostLabel.onclick = () => {
+    if (ignoreCostInput.disabled) return;
     ignoreCostInput.checked = !ignoreCostInput.checked;
     ignoreCostInput.dispatchEvent(new Event("change"));
   };
@@ -637,7 +679,23 @@ function createSlayerBotUI() {
   });
 
   updateIgnoreCostSwitchStyle();
-  panel.appendChild(ignoreCostContainer);
+
+  updateIgnoreCostDisableState = () => {
+    const isManual = window.autoSlayerStrategy === "manual";
+    ignoreCostInput.disabled = isManual;
+    if (isManual) {
+      ignoreCostContainer.style.opacity = "0.5";
+      ignoreCostLabel.style.cursor = "not-allowed";
+      ignoreCostSwitch.style.cursor = "not-allowed";
+    } else {
+      ignoreCostContainer.style.opacity = "1";
+      ignoreCostLabel.style.cursor = "pointer";
+      ignoreCostSwitch.style.cursor = "pointer";
+    }
+  };
+  updateIgnoreCostDisableState();
+
+  contentContainer.appendChild(ignoreCostContainer);
 
   // Weakness Toggle Container
   const weaknessContainer = document.createElement("div");
@@ -720,10 +778,188 @@ function createSlayerBotUI() {
   });
 
   updateWeaknessSwitchStyle();
-  panel.appendChild(weaknessContainer);
+  contentContainer.appendChild(weaknessContainer);
+
+  // Auto Bank Toggle Container
+  const autoBankContainer = document.createElement("div");
+  autoBankContainer.style.display = "flex";
+  autoBankContainer.style.alignItems = "center";
+  autoBankContainer.style.justifyContent = "space-between";
+  autoBankContainer.style.gap = "12px";
+  autoBankContainer.style.fontSize = "12px";
+  autoBankContainer.style.color = "#e0e0e0";
+  autoBankContainer.style.marginTop = "4px";
+  autoBankContainer.title = "Automatically bank any items dropped by monsters while the slayer bot is active";
+
+  const autoBankLabel = document.createElement("span");
+  autoBankLabel.innerText = "Auto Bank Drops";
+  autoBankLabel.style.fontWeight = "500";
+  autoBankLabel.style.cursor = "pointer";
+  autoBankContainer.appendChild(autoBankLabel);
+
+  const autoBankSwitch = document.createElement("label");
+  autoBankSwitch.style.position = "relative";
+  autoBankSwitch.style.display = "inline-block";
+  autoBankSwitch.style.width = "34px";
+  autoBankSwitch.style.height = "20px";
+  autoBankSwitch.style.cursor = "pointer";
+
+  const autoBankInput = document.createElement("input");
+  autoBankInput.type = "checkbox";
+  autoBankInput.style.opacity = "0";
+  autoBankInput.style.width = "0";
+  autoBankInput.style.height = "0";
+  autoBankInput.checked = window.autoSlayerAutoBank;
+
+  const autoBankSlider = document.createElement("span");
+  autoBankSlider.style.position = "absolute";
+  autoBankSlider.style.top = "0";
+  autoBankSlider.style.left = "0";
+  autoBankSlider.style.right = "0";
+  autoBankSlider.style.bottom = "0";
+  autoBankSlider.style.backgroundColor = "#555";
+  autoBankSlider.style.transition = "0.3s";
+  autoBankSlider.style.borderRadius = "20px";
+  autoBankSlider.style.border = "1px solid #3d4f4f";
+
+  const autoBankKnob = document.createElement("span");
+  autoBankKnob.style.position = "absolute";
+  autoBankKnob.style.content = '""';
+  autoBankKnob.style.height = "12px";
+  autoBankKnob.style.width = "12px";
+  autoBankKnob.style.left = "3px";
+  autoBankKnob.style.bottom = "3px";
+  autoBankKnob.style.backgroundColor = "#ffffff";
+  autoBankKnob.style.transition = "0.3s";
+  autoBankKnob.style.borderRadius = "50%";
+  autoBankSlider.appendChild(autoBankKnob);
+
+  autoBankSwitch.appendChild(autoBankInput);
+  autoBankSwitch.appendChild(autoBankSlider);
+  autoBankContainer.appendChild(autoBankSwitch);
+
+  function updateAutoBankSwitchStyle() {
+    if (autoBankInput.checked) {
+      autoBankSlider.style.backgroundColor = "#ff9800"; // Theme orange
+      autoBankKnob.style.transform = "translateX(14px)";
+    } else {
+      autoBankSlider.style.backgroundColor = "#2c3535";
+      autoBankKnob.style.transform = "translateX(0px)";
+    }
+  }
+
+  autoBankLabel.onclick = () => {
+    autoBankInput.checked = !autoBankInput.checked;
+    autoBankInput.dispatchEvent(new Event("change"));
+  };
+
+  autoBankInput.addEventListener("change", () => {
+    window.autoSlayerAutoBank = autoBankInput.checked;
+    localStorage.setItem("autoSlayerAutoBank", String(autoBankInput.checked));
+    updateAutoBankSwitchStyle();
+    console.log(`[Mod] Auto Slayer Auto Bank set to: ${window.autoSlayerAutoBank}`);
+  });
+
+  updateAutoBankSwitchStyle();
+  contentContainer.appendChild(autoBankContainer);
+
+  panel.appendChild(contentContainer);
+
+  // Minimization logic
+  let isMinimized = localStorage.getItem("slayerBotMinimized") === "true";
+
+  function updateMinimizeState() {
+    if (isMinimized) {
+      contentContainer.style.display = "none";
+      minBtn.innerText = "+";
+      titleBar.style.borderBottom = "none";
+    } else {
+      contentContainer.style.display = "flex";
+      minBtn.innerText = "−";
+      titleBar.style.borderBottom = "1px solid #3d4f4f";
+    }
+  }
+
+  minBtn.onclick = () => {
+    const oldHeight = panel.getBoundingClientRect().height;
+    const oldTop = parseFloat(panel.style.top);
+
+    isMinimized = !isMinimized;
+    localStorage.setItem("slayerBotMinimized", String(isMinimized));
+    updateMinimizeState();
+
+    if (!isNaN(oldTop)) {
+      const newHeight = panel.getBoundingClientRect().height;
+      const newTop = oldTop + oldHeight - newHeight;
+      panel.style.top = newTop + "px";
+      localStorage.setItem("slayerBotPosition", JSON.stringify({
+        left: parseFloat(panel.style.left) || 20,
+        top: newTop
+      }));
+    }
+
+    requestAnimationFrame(() => {
+      clampPanelToScreen();
+    });
+  };
+
+  updateMinimizeState();
+
+  // Position clamping logic
+  function clampPanelToScreen() {
+    const rect = panel.getBoundingClientRect();
+    const panelWidth = rect.width;
+    const panelHeight = rect.height;
+
+    let left = parseFloat(panel.style.left);
+    let top = parseFloat(panel.style.top);
+
+    if (isNaN(left) || isNaN(top)) return;
+
+    const maxLeft = window.innerWidth - panelWidth;
+    const maxTop = window.innerHeight - panelHeight;
+
+    const clampedLeft = Math.max(0, Math.min(left, maxLeft));
+    const clampedTop = Math.max(0, Math.min(top, maxTop));
+
+    if (clampedLeft !== left || clampedTop !== top) {
+      panel.style.left = clampedLeft + "px";
+      panel.style.top = clampedTop + "px";
+      localStorage.setItem("slayerBotPosition", JSON.stringify({ left: clampedLeft, top: clampedTop }));
+    }
+  }
+
+  window.addEventListener("resize", clampPanelToScreen);
 
   document.body.appendChild(panel);
   console.log("[Mod] Slayer Bot UI panel injected successfully.");
+
+  // Set initial position
+  const savedPos = localStorage.getItem("slayerBotPosition");
+  let initLeft = 20;
+  const rect = panel.getBoundingClientRect();
+  let initTop = window.innerHeight - rect.height - 20;
+
+  if (savedPos) {
+    try {
+      const parsed = JSON.parse(savedPos);
+      if (typeof parsed.left === "number" && typeof parsed.top === "number") {
+        initLeft = parsed.left;
+        initTop = parsed.top;
+      }
+    } catch (e) {
+      console.error("[Mod] Error parsing saved slayerBotPosition", e);
+    }
+  }
+
+  // Clamp initial position to make sure it's on screen
+  const maxLeft = window.innerWidth - rect.width;
+  const maxTop = window.innerHeight - rect.height;
+  initLeft = Math.max(0, Math.min(initLeft, maxLeft));
+  initTop = Math.max(0, Math.min(initTop, maxTop));
+
+  panel.style.left = initLeft + "px";
+  panel.style.top = initTop + "px";
 }
 
 // Ensure the UI is mounted
@@ -738,11 +974,68 @@ createMod(({ playerStore }) => {
   console.log("[Mod] Player store loaded successfully!");
 
   let notified = false;
+  let isBanking = false;
+  const processedItems = new Set<any>();
+
   playerStore.subscribe(() => {
     // Exit early if the user has disabled the bot via the UI
     if (!window.autoSlayerEnabled) return;
+    if (isBanking) return;
 
     const playerState = playerStore.getState().state;
+
+    // 0. Auto-Bank Drops
+    if (window.autoSlayerAutoBank) {
+      const itemsOnGround = playerState.itemsOnGround;
+      if (itemsOnGround && itemsOnGround.some(item => item !== null)) {
+        const bank = playerState.items.bank;
+        const itemsToDeposit: any[] = [];
+        const itemsToRemove: any[] = [];
+
+        let emptySlots = bank.filter((item: any) => item === null).length;
+        const temporaryBankIds = new Set(bank.filter((item: any) => item !== null).map((item: any) => item.id));
+
+        for (const item of itemsOnGround) {
+          if (item === null || item.id === null) continue;
+
+          if (processedItems.has(item)) continue;
+
+          if (temporaryBankIds.has(item.id)) {
+            processedItems.add(item);
+            itemsToDeposit.push(item);
+            itemsToRemove.push(item);
+          } else if (emptySlots > 0) {
+            temporaryBankIds.add(item.id);
+            emptySlots--;
+            processedItems.add(item);
+            itemsToDeposit.push(item);
+            itemsToRemove.push(item);
+          } else {
+            console.warn(`[Mod] Bank is full. Cannot auto-bank item ID ${item.id} (${item.name}).`);
+          }
+        }
+
+        // Clean up processedItems that are no longer on the ground to prevent memory leaks
+        for (const item of processedItems) {
+          if (!itemsOnGround.includes(item)) {
+            processedItems.delete(item);
+          }
+        }
+
+        if (itemsToDeposit.length > 0) {
+          isBanking = true;
+          try {
+            playerStore.getState().depositItemsToBank(itemsToDeposit);
+            playerStore.getState().useItemsOnGround(itemsToRemove);
+          } finally {
+            isBanking = false;
+          }
+        }
+      } else {
+        processedItems.clear();
+      }
+    }
+
     const slayerCurrentAmount = playerState.slayerInfo.currentSlayerTask
       ? playerState.slayerInfo.currentSlayerTask.currentAmount
       : 0;
